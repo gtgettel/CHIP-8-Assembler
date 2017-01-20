@@ -6,6 +6,12 @@ use std::io::BufReader;
 use std::path::Path;
 use std::path::PathBuf;
 use std::convert::AsRef;
+use std::process;
+
+
+fn exit_compilation(mut writer: &File){
+	process::exit(1);
+}
 
 
 fn parse_line(line: String, mut writer: &File){
@@ -14,12 +20,26 @@ fn parse_line(line: String, mut writer: &File){
 
 	match &words[0] as &str{
 		"SYS"  => {
-			writer.write_fmt(format_args!("{:b}", 0));
+			if words.len() > 2 {
+				println!("Too many arguments: SYS addr");
+				exit_compilation(writer);
+			}
+			let mut nnn = &words[1] as &str;
+			nnn.to_string();
+			let nnn_int: u16 = nnn.parse().unwrap();
+			if nnn_int > 4095 {
+				println!("Argument too large [addr]: SYS takes 12-bit address");
+				exit_compilation(writer);
+			}
+			writer.write_fmt(format_args!("{:04b}", 0x0));
+			writer.write_fmt(format_args!("{:012b}", nnn_int));
 		} 
 		"CLS"  => {
-			writer.write_fmt(format_args!("{:b}", 0x00E0));
+			writer.write_fmt(format_args!("{:016b}", 0x00E0));
 		}
-		// "RET"  => ,
+		"RET"  => {
+			writer.write_fmt(format_args!("{:016b}", 0x00EE))
+		}
 		// "JP"   => ,
 		// "CALL" => ,
 		// "SE"   => ,
