@@ -59,6 +59,22 @@ fn process_register_arg(call: &str, ln: i64, arg_num: i32, reg: &str, writer: &F
 }
 
 
+fn process_8XYZ(call: &str, ln: i64, reg1: &str, reg2: &str, mut writer: &File, delim: u32, length: u32) -> () {
+	if length > 3 {
+		println!("Line {0}: Too many arguments, {1}", ln, call);
+		exit_compilation(writer);
+	} else if length < 3 {
+		println!("Line {0}: Too few arguments, {1}", ln, call);
+		exit_compilation(writer);
+	} else {
+		writer.write_fmt(format_args!("{:04b}", 0x8));
+		process_register_arg(call, ln, 1, reg1, writer);
+		process_register_arg(call, ln, 2, reg2, writer);
+		writer.write_fmt(format_args!("{:04b}", delim));
+	}
+}
+
+
 // TODO: track line number
 fn parse_line(line: String, mut writer: &File, ln: i64){
 	let line = str::replace(&line[..], ",", "");
@@ -155,14 +171,69 @@ fn parse_line(line: String, mut writer: &File, ln: i64){
 				}
 			}
 		}
-		// "ADD"  => ,
-		// "OR"   => ,
-		// "AND"  => ,
-		// "XOR"  => ,
-		// "SUB"  => ,
-		// "SHR"  => ,
-		// "SUBN" => ,
-		// "SHL"  => ,
+		"ADD"  => {
+			if words.len() > 3 {
+				println!("Line {0}: Too many arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else if words.len() < 3 {
+				println!("Line {0}: Too few arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else {
+				if str::contains(&words[2],"V") {
+					writer.write_fmt(format_args!("{:04b}", 0x8));
+					process_register_arg(&words[0] as &str, ln, 1, &words[1] as &str, writer);
+					process_register_arg(&words[0] as &str, ln, 2, &words[2] as &str, writer);
+					writer.write_fmt(format_args!("{:04b}", 0x4));
+				} else {
+					writer.write_fmt(format_args!("{:04b}", 0x7));
+					process_register_arg(&words[0] as &str, ln, 1, &words[1] as &str, writer);
+					check_less_than_16(&words[0] as &str, ln, 2, &words[2] as &str, writer);
+				}
+			}
+		}
+		"OR"   => {
+			process_8XYZ(&words[0] as &str, ln, &words[1] as &str, &words[2] as &str, writer, 0x1, words.len() as u32);
+		}
+		"AND"  => {
+			process_8XYZ(&words[0] as &str, ln, &words[1] as &str, &words[2] as &str, writer, 0x2, words.len() as u32);
+		}
+		"XOR"  => {
+			process_8XYZ(&words[0] as &str, ln, &words[1] as &str, &words[2] as &str, writer, 0x3, words.len() as u32);
+		}
+		"SUB"  => {
+			process_8XYZ(&words[0] as &str, ln, &words[1] as &str, &words[2] as &str, writer, 0x5, words.len() as u32);
+		}
+		"SHR"  => {
+			if words.len() > 2 {
+				println!("Line {0}: Too many arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else if words.len() < 2 {
+				println!("Line {0}: Too few arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else {
+				writer.write_fmt(format_args!("{:04b}", 0x8));
+				process_register_arg(&words[0], ln, 1, &words[1] as &str, writer);
+				writer.write_fmt(format_args!("{:04b}", 0xF));
+				writer.write_fmt(format_args!("{:04b}", 0x6));
+			}
+		}
+		"SUBN" => {
+			process_8XYZ(&words[0] as &str, ln, &words[1] as &str, &words[2] as &str, writer, 0x7, words.len() as u32);
+		}
+		"SHL"  => {
+			if words.len() > 2 {
+				println!("Line {0}: Too many arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else if words.len() < 2 {
+				println!("Line {0}: Too few arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else {
+				writer.write_fmt(format_args!("{:04b}", 0x8));
+				process_register_arg(&words[0], ln, 1, &words[1] as &str, writer);
+				writer.write_fmt(format_args!("{:04b}", 0xF));
+				writer.write_fmt(format_args!("{:04b}", 0xE));
+			}
+		}
 		// "RND"  => ,
 		// "DRW"  => ,
 		// "SKP"  => ,
