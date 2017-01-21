@@ -1,54 +1,81 @@
-use std::io::Error;
 use std::fs::File;
 use std::io::prelude::*;
 use std::env;
 use std::io::BufReader;
 use std::path::Path;
 use std::path::PathBuf;
-use std::convert::AsRef;
 use std::process;
 use std::str;
 
 
-fn exit_compilation(mut writer: &File){
+fn exit_compilation(writer: &File){
 	process::exit(1);
 }
 
 
-fn check_less_than_4096(mut int: &str, mut writer: &File) -> bool{
+fn check_less_than_4096(call: &str, ln: i64, arg_num: i32, int: &str, mut writer: &File) -> () {
 	int.to_string();
 	let int: u16 = int.parse().unwrap();
 	if int > 4095 {
-		return false;
-	}
-	else {
+		println!("Line {0}: Argument {1} outsize of address range, {2} takes 12-bit address", ln, arg_num, call);
+		exit_compilation(writer);
+	} else {
 		writer.write_fmt(format_args!("{:012b}", int));
-		return true; 
+	}
+}
+
+
+fn check_less_than_256(call: &str, ln: i64, arg_num: i32, int: &str, mut writer: &File) -> () {
+	int.to_string();
+	let int: u8 = int.parse().unwrap();
+	if int > 255 {
+		println!("Line {0}: Argument {1} outsize of range, {2}", ln, arg_num, call);
+		exit_compilation(writer);
+	} else {
+		writer.write_fmt(format_args!("{:08b}",int));
+	}
+}
+
+
+fn check_less_than_16(call: &str, ln :i64, arg_num: i32, int: &str, mut writer: &File) -> () {
+	int.to_string();
+	let int: u8 = int.parse().unwrap();
+	if int > 15 {
+		println!("Line {0}: Argument {1} outsize of range, {2}", ln, arg_num, call);
+		exit_compilation(writer);
+	} else {
+		writer.write_fmt(format_args!("{:04b}",int));
+	}
+}
+
+
+fn process_register_arg(call: &str, ln: i64, arg_num: i32, reg: &str, writer: &File) -> () {
+	if str::contains(reg, "V") {
+		let reg = str::replace(reg, "V", "");
+		check_less_than_16(call, ln, arg_num, &reg[..], writer);
+	}	else {
+		println!("Line {0}: Argument {1} is not register", ln, arg_num);
 	}
 }
 
 
 // TODO: track line number
-fn parse_line(mut line: String, mut writer: &File, ln: i64){
-	let mut line = str::replace(&line[..], ",", "");
-	let mut line = line.split(" ");
+fn parse_line(line: String, mut writer: &File, ln: i64){
+	let line = str::replace(&line[..], ",", "");
+	let line = line.split(" ");
 	let words: Vec<&str> = line.collect();
 
 	match &words[0] as &str{
 		"SYS"  => {
 			if words.len() > 2 {
-				println!("Line {}: Too many arguments, SYS", ln);
+				println!("Line {0}: Too many arguments, {1}", ln, &words[0]);
 				exit_compilation(writer);
 			} else if words.len() <= 0 {
-				println!("Line {}: Too few arguments, SYS", ln);
+				println!("Line {0}: Too few arguments, {1}", ln, &words[0]);
 				exit_compilation(writer);
 			}
 			writer.write_fmt(format_args!("{:04b}", 0x0));
-			if check_less_than_4096(&words[1] as &str, writer) {
-				println!("Line {}: Argument outsize of address range, SYS takes 12-bit address", ln);
-				exit_compilation(writer);
-			}
-			
+			check_less_than_4096(&words[0] as &str, ln, 1, &words[1] as &str, writer);		
 		} 
 		"CLS"  => {
 			writer.write_fmt(format_args!("{:016b}", 0x00E0));
@@ -58,33 +85,76 @@ fn parse_line(mut line: String, mut writer: &File, ln: i64){
 		}
 		"JP"   => {
 			if words.len() > 3 {
-				println!("Line {}: Too many arguments, JP", ln);
+				println!("Line {}: Too many arguments, {1}", ln, &words[0]);
 				exit_compilation(writer);
 			} else if words.len() == 3 {
 				if str::contains(&words[1],"V") {
 					writer.write_fmt(format_args!("{:04b}", 0xB));
-					if check_less_than_4096(&words[2] as &str, writer) {
-						println!("Line {}: Argument outsize of address range, JP takes 12-bit address", ln);
-						exit_compilation(writer);
-					}
+					check_less_than_4096(&words[0] as &str, ln, 2, &words[2] as &str, writer);
 				} else {
-					println!("Line {}: First argument is not register, JP", ln);
+					println!("Line {0}: Argument {1} is not register, {2}", ln, 1, &words[0]);
 					exit_compilation(writer);
 				}
 			} else if words.len() == 2 {
 				writer.write_fmt(format_args!("{:04b}", 0x1));
-				if check_less_than_4096(&words[1] as &str, writer) {
-					println!("Line {}: Argument outsize of address range, JP takes 12-bit address", ln);
-					exit_compilation(writer);
-				}
+				check_less_than_4096(&words[0], ln, 1, &words[1] as &str, writer);
 			} else {
-				println!("Line {}: Too few arguments, JP", ln);
+				println!("Line {0}: Too few arguments, {1}", ln, &words[0]);
 				exit_compilation(writer);
 			}
 		}
-		// "CALL" => ,
-		// "SE"   => ,
-		// "SNE"  => ,
+		"CALL" => {
+			if words.len() > 2 {
+				println!("Line {0}: Too many arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else if words.len() < 2 {
+				println!("Line {0}: Too few arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else {
+				writer.write_fmt(format_args!("{:04b}", 0x2));
+				check_less_than_4096(&words[0], ln, 1, &words[1] as &str, writer);
+			}
+		}
+		"SE"   => {
+			if words.len() > 3 {
+				println!("Line {0}: Too many arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else if words.len() < 3 {
+				println!("Line {0}: Too few arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else {
+				if str::contains(&words[2],"V") {
+					writer.write_fmt(format_args!("{:04b}", 0x5));
+					process_register_arg(&words[0] as &str, ln, 1, &words[1] as &str, writer);
+					process_register_arg(&words[0] as &str, ln, 2, &words[2] as &str, writer);
+					writer.write_fmt(format_args!("{:04b}", 0x0));
+				} else {
+					writer.write_fmt(format_args!("{:04b}", 0x3));
+					process_register_arg(&words[0] as &str, ln, 1, &words[1] as &str, writer);
+					check_less_than_16(&words[0] as &str, ln, 2, &words[2] as &str, writer);
+				}
+			}
+		}
+		"SNE"  => {
+			if words.len() > 3 {
+				println!("Line {0}: Too many arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else if words.len() < 3 {
+				println!("Line {0}: Too few arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else {
+				if str::contains(&words[2],"V") {
+					writer.write_fmt(format_args!("{:04b}", 0x9));
+					process_register_arg(&words[0] as &str, ln, 1, &words[1] as &str, writer);
+					process_register_arg(&words[0] as &str, ln, 2, &words[2] as &str, writer);
+					writer.write_fmt(format_args!("{:04b}", 0x0));
+				} else {
+					writer.write_fmt(format_args!("{:04b}", 0x4));
+					process_register_arg(&words[0] as &str, ln, 1, &words[1] as &str, writer);
+					check_less_than_16(&words[0] as &str, ln, 2, &words[2] as &str, writer);
+				}
+			}
+		}
 		// "ADD"  => ,
 		// "OR"   => ,
 		// "AND"  => ,
@@ -115,9 +185,9 @@ fn main(){
 	let mut ln: i64 = 0;
 	// parse command line
 	let args: Vec<String> = env::args().collect();
-	let mut path = Path::new(&args[1]);
+	let path = Path::new(&args[1]);
 	let display = path.display();
-	let mut file = match File::open(&path){
+	let file = match File::open(&path){
     Err(why) => panic!("Error: couldn't open {}", &display),
     Ok(file) => file,
   };
@@ -125,7 +195,7 @@ fn main(){
   let mut pathB = PathBuf::from(&args[1]); 
   pathB.set_extension("c8"); // change extension to chip-8 binary
   let displayB = pathB.display();
-  let mut fileBinary = match File::create(&pathB){
+  let fileBinary = match File::create(&pathB){
     Err(why) => panic!("Error: couldn't create {}", &displayB),
     Ok(fileBinary) => fileBinary,
   };
