@@ -29,7 +29,7 @@ fn check_less_than_256(call: &str, ln: i64, arg_num: i32, int: &str, mut writer:
 	int.to_string();
 	let int: u8 = int.parse().unwrap();
 	if int > 255 {
-		println!("Line {0}: Argument {1} outsize of range, {2}", ln, arg_num, call);
+		println!("Line {0}: Argument {1} outsize of range, {2} takes byte", ln, arg_num, call);
 		exit_compilation(writer);
 	} else {
 		writer.write_fmt(format_args!("{:08b}",int));
@@ -179,7 +179,11 @@ fn parse_line(line: String, mut writer: &File, ln: i64){
 				println!("Line {0}: Too few arguments, {1}", ln, &words[0]);
 				exit_compilation(writer);
 			} else {
-				if str::contains(&words[2],"V") {
+				if &words[2] as &str == "I" {
+					writer.write_fmt(format_args!("{:04b}", 0xF));
+					process_register_arg(&words[0] as &str, ln, 1, &words[1] as &str, writer);
+					writer.write_fmt(format_args!("{:08b}", 0x1E));
+				} else if str::contains(&words[2],"V") {
 					writer.write_fmt(format_args!("{:04b}", 0x8));
 					process_register_arg(&words[0] as &str, ln, 1, &words[1] as &str, writer);
 					process_register_arg(&words[0] as &str, ln, 2, &words[2] as &str, writer);
@@ -213,8 +217,7 @@ fn parse_line(line: String, mut writer: &File, ln: i64){
 			} else {
 				writer.write_fmt(format_args!("{:04b}", 0x8));
 				process_register_arg(&words[0], ln, 1, &words[1] as &str, writer);
-				writer.write_fmt(format_args!("{:04b}", 0xF));
-				writer.write_fmt(format_args!("{:04b}", 0x6));
+				writer.write_fmt(format_args!("{:08b}", 0xF6));
 			}
 		}
 		"SUBN" => {
@@ -230,15 +233,127 @@ fn parse_line(line: String, mut writer: &File, ln: i64){
 			} else {
 				writer.write_fmt(format_args!("{:04b}", 0x8));
 				process_register_arg(&words[0], ln, 1, &words[1] as &str, writer);
-				writer.write_fmt(format_args!("{:04b}", 0xF));
-				writer.write_fmt(format_args!("{:04b}", 0xE));
+				writer.write_fmt(format_args!("{:08b}", 0xFE));
 			}
 		}
-		// "RND"  => ,
-		// "DRW"  => ,
-		// "SKP"  => ,
-		// "SKNP" => ,
-		// "LD"   => ,
+		"RND"  => {
+			if words.len() > 3 {
+				println!("Line {0}: Too many arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else if words.len() < 3 {
+				println!("Line {0}: Too few arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else {
+				writer.write_fmt(format_args!("{:04b}", 0xC));
+				process_register_arg(&words[0] as &str, ln, 1, &words[1] as &str, writer);
+				check_less_than_256(&words[0] as &str, ln, 2, &words[2] as &str, writer);
+			}
+		}
+		"DRW"  => {
+			if words.len() > 4 {
+				println!("Line {0}: Too many arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else if words.len() < 4 {
+				println!("Line {0}: Too few arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else {
+				writer.write_fmt(format_args!("{:04b}", 0xD));
+				process_register_arg(&words[0] as &str, ln, 1, &words[1] as &str, writer);
+				process_register_arg(&words[0] as &str, ln, 2, &words[2] as &str, writer);
+				check_less_than_16(&words[0] as &str, ln, 3, &words[3] as &str, writer);
+			}
+		}
+		"SKP"  => {
+			if words.len() > 2 {
+				println!("Line {0}: Too many arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else if words.len() < 2 {
+				println!("Line {0}: Too few arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else {
+				writer.write_fmt(format_args!("{:04b}", 0xE));
+				process_register_arg(&words[0], ln, 1, &words[1] as &str, writer);
+				writer.write_fmt(format_args!("{:08b}", 0x9E));
+			}
+		}
+		"SKNP" => {
+			if words.len() > 2 {
+				println!("Line {0}: Too many arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else if words.len() < 2 {
+				println!("Line {0}: Too few arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else {
+				writer.write_fmt(format_args!("{:04b}", 0xE));
+				process_register_arg(&words[0], ln, 1, &words[1] as &str, writer);
+				writer.write_fmt(format_args!("{:08b}", 0xA1));
+			}
+		}
+		 "LD"   => {
+		 	if words.len() > 3 {
+				println!("Line {0}: Too many arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else if words.len() < 3 {
+				println!("Line {0}: Too few arguments, {1}", ln, &words[0]);
+				exit_compilation(writer);
+			} else {
+				if &words[1] as &str == "I" {
+					if str::contains(&words[2],"V") {
+						writer.write_fmt(format_args!("{:04b}", 0xF));
+						process_register_arg(&words[0], ln, 1, &words[2] as &str, writer);
+						writer.write_fmt(format_args!("{:08b}", 0x55));
+					} else {
+						writer.write_fmt(format_args!("{:04b}", 0xA));
+						check_less_than_4096(&words[0], ln, 1, &words[2] as &str, writer);
+					}
+				} else if &words[1] as &str == "DT" {
+					writer.write_fmt(format_args!("{:04b}", 0xF));
+					process_register_arg(&words[0], ln, 1, &words[2] as &str, writer);
+					writer.write_fmt(format_args!("{:08b}", 0x15));
+				} else if &words[1] as &str == "ST" {
+					writer.write_fmt(format_args!("{:04b}", 0xF));
+					process_register_arg(&words[0], ln, 1, &words[2] as &str, writer);
+					writer.write_fmt(format_args!("{:08b}", 0x18));
+				} else if &words[1] as &str == "F" { 
+					writer.write_fmt(format_args!("{:04b}", 0xF));
+					process_register_arg(&words[0], ln, 1, &words[2] as &str, writer);
+					writer.write_fmt(format_args!("{:08b}", 0x29));
+				} else if &words[1] as &str == "B" {
+					writer.write_fmt(format_args!("{:04b}", 0xF));
+					process_register_arg(&words[0], ln, 1, &words[2] as &str, writer);
+					writer.write_fmt(format_args!("{:08b}", 0x33));
+				} else if str::contains(&words[1],"V") {
+					if str::contains(&words[2],"V") {
+						writer.write_fmt(format_args!("{:04b}", 0x8));
+						process_register_arg(&words[0], ln, 1, &words[1] as &str, writer);
+						process_register_arg(&words[0], ln, 1, &words[2] as &str, writer);
+						writer.write_fmt(format_args!("{:04b}", 0x0));
+					} else if &words[2] as &str == "DT" {
+						writer.write_fmt(format_args!("{:04b}", 0xF));
+						process_register_arg(&words[0], ln, 1, &words[1] as &str, writer);
+						writer.write_fmt(format_args!("{:08b}", 0x07));
+					} else if &words[2] as &str == "I" {
+						writer.write_fmt(format_args!("{:04b}", 0xF));
+						process_register_arg(&words[0], ln, 1, &words[1] as &str, writer);
+						writer.write_fmt(format_args!("{:08b}", 0x65));
+					} else if &words[2] as &str == "K" {
+ 						writer.write_fmt(format_args!("{:04b}", 0xF));
+						process_register_arg(&words[0], ln, 1, &words[1] as &str, writer);
+						writer.write_fmt(format_args!("{:08b}", 0x0A));
+					} else {
+						writer.write_fmt(format_args!("{:04b}", 0xA));
+						process_register_arg(&words[0], ln, 1, &words[1] as &str, writer);
+						check_less_than_4096(&words[0], ln, 1, &words[2] as &str, writer);
+					}
+				} else {
+					println!("Line {0}: Unrecognized {1} arg, {2}", ln, 1, &words[0]);
+				}
+				writer.write_fmt(format_args!("{:04b}", 0xC));
+				process_register_arg(&words[0] as &str, ln, 1, &words[1] as &str, writer);
+				check_less_than_256(&words[0] as &str, ln, 2, &words[2] as &str, writer);
+			}
+		}
+		// Super Chip-8 Opcodes
 		// "SCD"  => ,
 		// "SCR"  => ,
 		// "SCL"  => ,
